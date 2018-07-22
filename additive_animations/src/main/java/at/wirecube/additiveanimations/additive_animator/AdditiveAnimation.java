@@ -20,27 +20,25 @@ import android.animation.TimeInterpolator;
 import android.animation.TypeEvaluator;
 import android.graphics.Path;
 import android.util.Property;
-import android.view.View;
 
 import at.wirecube.additiveanimations.helper.evaluators.PathEvaluator;
 
 /**
  * This class is public for subclasses of AdditiveAnimator only, and should not be used outside of that.
  */
-public class AdditiveAnimation {
+public class AdditiveAnimation<T> {
 
     private String mTag;
     private float mStartValue;
     private float mTargetValue;
-    private Property<View, Float> mProperty;
+    private Property<T, Float> mProperty;
     private Path mPath;
     private PathEvaluator.PathMode mPathMode;
     private PathEvaluator mSharedPathEvaluator;
     private TypeEvaluator mCustomTypeEvaluator;
-    private View mTargetView;
+    private T mTarget;
     private int mHashCode;
     private TimeInterpolator mCustomInterpolator; // each animation can have its own interpolator
-//    private AccumulatedAnimationValueManager mAccumulator;
     private AccumulatedAnimationValue mAccumulatedValues;
 
     /**
@@ -48,8 +46,8 @@ public class AdditiveAnimation {
      * don't need to worry about the logic to apply the changes. This is taken care of by using the
      * Setter provided by `property`.
      */
-    public AdditiveAnimation(View targetView, Property<View, Float> property, float startValue, float targetValue) {
-        mTargetView = targetView;
+    public AdditiveAnimation(T target, Property<T, Float> property, float startValue, float targetValue) {
+        mTarget = target;
         mProperty = property;
         mTargetValue = targetValue;
         mStartValue = startValue;
@@ -62,15 +60,15 @@ public class AdditiveAnimation {
      * @param startValue Start value of the animated property.
      * @param targetValue Target value of the animated property.
      */
-    public AdditiveAnimation(View targetView, String tag, float startValue, float targetValue) {
-        mTargetView = targetView;
+    public AdditiveAnimation(T target, String tag, float startValue, float targetValue) {
+        mTarget = target;
         mStartValue = startValue;
         mTargetValue = targetValue;
         setTag(tag);
     }
 
-    public AdditiveAnimation(View targetView, String tag, float startValue, Path path, PathEvaluator.PathMode pathMode, PathEvaluator sharedEvaluator) {
-        mTargetView = targetView;
+    public AdditiveAnimation(T target, String tag, float startValue, Path path, PathEvaluator.PathMode pathMode, PathEvaluator sharedEvaluator) {
+        mTarget = target;
         mStartValue = startValue;
         mPath = path;
         mSharedPathEvaluator = sharedEvaluator;
@@ -79,8 +77,8 @@ public class AdditiveAnimation {
         setTag(tag);
     }
 
-    public AdditiveAnimation(View targetView, Property<View, Float> property, float startValue, Path path, PathEvaluator.PathMode pathMode, PathEvaluator sharedEvaluator) {
-        mTargetView = targetView;
+    public AdditiveAnimation(T target, Property<T, Float> property, float startValue, Path path, PathEvaluator.PathMode pathMode, PathEvaluator sharedEvaluator) {
+        mTarget = target;
         mProperty = property;
         mStartValue = startValue;
         mPath = path;
@@ -97,7 +95,7 @@ public class AdditiveAnimation {
     private void setTag(String tag) {
         mTag = tag;
         // TODO: find a good hash code that doesn't collide often
-        mHashCode = mTag.hashCode() * ((2 << 17) - 1) + mTargetView.hashCode();
+        mHashCode = mTag.hashCode() * ((2 << 17) - 1) + mTarget.hashCode();
     }
 
     public String getTag() {
@@ -124,11 +122,11 @@ public class AdditiveAnimation {
         return mCustomTypeEvaluator;
     }
 
-    public View getView() {
-        return mTargetView;
+    public T getTarget() {
+        return mTarget;
     }
 
-    public Property<View, Float> getProperty() { return mProperty; }
+    public Property<T, Float> getProperty() { return mProperty; }
 
     public Path getPath() {
         return mPath;
@@ -164,10 +162,34 @@ public class AdditiveAnimation {
             return true;
         }
         AdditiveAnimation other = (AdditiveAnimation) o;
-        return other.mTag.hashCode() == mTag.hashCode() && other.mTargetView == mTargetView;
+        return other.mTag.hashCode() == mTag.hashCode() && other.mTarget == mTarget;
     }
 
     public AccumulatedAnimationValue getAccumulatedValues() {
         return mAccumulatedValues;
+    }
+
+    public AdditiveAnimation<T> cloneWithTarget(T target, Float startValue) {
+        final AdditiveAnimation animation;
+        if(this.getProperty() != null) {
+            if (this.getPath() != null) {
+                animation = new AdditiveAnimation(target, mProperty, startValue, getPath(), mPathMode, mSharedPathEvaluator);
+            } else {
+                animation = new AdditiveAnimation(target, mProperty, startValue, mTargetValue);
+            }
+        } else {
+            if(this.getPath() != null) {
+                animation = new AdditiveAnimation(target, mTag, startValue, getPath(), mPathMode, mSharedPathEvaluator);
+            } else {
+                animation = new AdditiveAnimation(target, mTag, startValue, mTargetValue);
+            }
+        }
+        if(mCustomInterpolator != null) {
+            animation.setCustomInterpolator(mCustomInterpolator);
+        }
+        if(mCustomTypeEvaluator != null) {
+            animation.setCustomTypeEvaluator(mCustomTypeEvaluator);
+        }
+        return animation;
     }
 }

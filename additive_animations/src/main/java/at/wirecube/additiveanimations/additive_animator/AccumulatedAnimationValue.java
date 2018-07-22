@@ -16,15 +16,15 @@
 
 package at.wirecube.additiveanimations.additive_animator;
 
-class AccumulatedAnimationValue {
-    final AdditiveAnimation animation;
-    Float tempValue;
+class AccumulatedAnimationValue<T> {
+    final AdditiveAnimation<T> animation;
+    float tempValue;
 
-    AccumulatedAnimationValue(AdditiveAnimation animation) {
+    AccumulatedAnimationValue(AdditiveAnimation<T> animation) {
         this.animation = animation;
     }
 
-    void addDelta(Float delta) {
+    void addDelta(float delta) {
         tempValue += delta;
     }
 }

@@ -19,8 +19,11 @@ package at.wirecube.additiveanimations.helper;
 import android.util.Property;
 import android.view.View;
 
-public abstract class FloatProperty extends Property<View, Float> {
+public abstract class FloatProperty <T> extends Property<T, Float> {
     public FloatProperty(String name) {
         super(Float.class, name);
     }
+
+    @Override
+    public abstract void set(T object, Float value);
 }
