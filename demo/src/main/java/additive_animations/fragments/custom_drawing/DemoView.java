@@ -23,22 +23,9 @@ public class DemoView extends View {
     final List<Rect> mRects = new ArrayList<>();
     final List<Paint> mPaints = new ArrayList<>();
 
-    // Animating a non-view property using AdditiveObjectAnimator just requires a getter and setter for the property:
-    private FloatProperty<Paint> mPaintColorProperty = new FloatProperty<Paint>("PaintColor") {
-        @Override
-        public Float get(Paint paint) {
-            return Float.valueOf(paint.getColor());
-        }
-
-        @Override
-        public void set(Paint object, Float value) {
-            object.setColor(value.intValue());
-        }
-    };
-
     public DemoView(Context context) {
         super(context);
-        for(int i = 0; i < 5; i++) {
+        for (int i = 0; i < 5; i++) {
             Rect rect = new Rect(this);
             mRects.add(rect);
             mPaints.add(rect.mPaint);
@@ -52,20 +39,22 @@ public class DemoView extends View {
 
         // Use the custom subclass to animate size and corner radius of all rects
         new AdditiveRectAnimator().setDuration(1000).setRepeatCount(ValueAnimator.INFINITE).setRepeatMode(ValueAnimator.REVERSE)
-                .targets(mRects, delayBetweenAnimations)
-                .size(DpConverter.converDpToPx(80))
-                .cornerRadius(DpConverter.converDpToPx(50))
-                .start();
+            .targets(mRects, delayBetweenAnimations)
+            .size(DpConverter.converDpToPx(80))
+            .cornerRadius(DpConverter.converDpToPx(50))
+            .start();
 
         // Default object animator to animate all the paints:
         new AdditiveObjectAnimator<Paint>()
-                .setDuration(1000)
-                .setRepeatCount(ValueAnimator.INFINITE)
-                .setRepeatMode(ValueAnimator.REVERSE)
-                .setAnimationApplier(animationApplier)
-                .targets(mPaints, delayBetweenAnimations)
-                .property(context.getResources().getColor(R.color.niceGreen), new ColorEvaluator(), mPaintColorProperty)
-                .start();
+            .setDuration(1000)
+            .setRepeatCount(ValueAnimator.INFINITE)
+            .setRepeatMode(ValueAnimator.REVERSE)
+            .setAnimationApplier(animationApplier)
+            .targets(mPaints, delayBetweenAnimations)
+            .property(context.getResources().getColor(R.color.niceGreen), new ColorEvaluator(),
+                // creating an inline property to use for the animation - very convenient when you don't want to create a subclass just for a single custom animation:
+                FloatProperty.create("PaintColor", paint -> (float) paint.getColor(), (paint, color) -> paint.setColor((int) color)))
+            .start();
 
         setOnTouchListener(new OnTouchListener() {
             float rotationTarget = 0;
@@ -89,14 +78,19 @@ public class DemoView extends View {
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
-        AdditiveRectAnimator.cancelAnimations(mRects);
-        AdditiveRectAnimator.cancelAnimations(mPaints);
-    }
-
-    @Override protected void onDraw(Canvas canvas) {
-        super.onDraw(canvas);
+        AdditiveRectAnimator.cancelAnimationsInCollection(mRects);
+        AdditiveRectAnimator.cancelAnimationsInCollection(mPaints);
 
         for(Rect rect : mRects) {
+            rect.clearView();
+        }
+    }
+
+    @Override
+    protected void onDraw(Canvas canvas) {
+        super.onDraw(canvas);
+
+        for (Rect rect : mRects) {
             canvas.save();
 
             // make sure we rotate around the center

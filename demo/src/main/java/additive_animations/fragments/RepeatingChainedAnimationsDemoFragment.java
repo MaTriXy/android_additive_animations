@@ -1,8 +1,8 @@
 package additive_animations.fragments;
 
 import android.os.Bundle;
-import android.support.annotation.Nullable;
-import android.support.v4.app.Fragment;
+import androidx.annotation.Nullable;
+import androidx.fragment.app.Fragment;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
@@ -11,13 +11,11 @@ import android.view.ViewGroup;
 import additive_animations.helper.DpConverter;
 import at.wirecube.additiveanimations.additive_animator.AdditiveAnimator;
 import additive_animations.subclass.AdditiveAnimatorSubclassDemo;
-import at.wirecube.additiveanimations.additive_animator.AnimationEndListener;
 import at.wirecube.additiveanimations.additiveanimationsdemo.R;
 
 public class RepeatingChainedAnimationsDemoFragment extends Fragment {
     ViewGroup rootView;
     View animatedView;
-
 
     @Nullable
     @Override
@@ -25,14 +23,11 @@ public class RepeatingChainedAnimationsDemoFragment extends Fragment {
         rootView = (ViewGroup) inflater.inflate(R.layout.fragment_tap_to_move_demo, container, false);
         animatedView = rootView.findViewById(R.id.animated_view);
 
-        rootView.setOnTouchListener(new View.OnTouchListener() {
-            @Override
-            public boolean onTouch(View v, MotionEvent event) {
-                if(event.getAction() == MotionEvent.ACTION_DOWN) {
-                    AdditiveAnimator.cancelAnimation(animatedView, View.ROTATION);
-                }
-                return true;
+        rootView.setOnTouchListener((v, event) -> {
+            if(event.getAction() == MotionEvent.ACTION_DOWN) {
+                AdditiveAnimator.cancelAnimation(animatedView, View.ROTATION);
             }
+            return true;
         });
 
         animate();
@@ -40,7 +35,7 @@ public class RepeatingChainedAnimationsDemoFragment extends Fragment {
     }
 
     private void animate() {
-        int colors[] = new int[] {
+        int[] colors = new int[] {
                 getResources().getColor(R.color.niceOrange),
                 getResources().getColor(R.color.niceBlue),
                 getResources().getColor(R.color.niceGreen),
@@ -56,12 +51,9 @@ public class RepeatingChainedAnimationsDemoFragment extends Fragment {
                 .thenBounceBeforeEnd(800, 300)
                 .thenBeforeEnd(400).x(px(50)).backgroundColor(colors[0]).rotationBy(90).setDuration(1000)
                 .thenBounceBeforeEnd(800, 300)
-                .addEndAction(new AnimationEndListener() {
-                    @Override
-                    public void onAnimationEnd(boolean wasCancelled) {
-                        if (getActivity() != null) {
-                            animate();
-                        }
+                .addEndAction(wasCancelled -> {
+                    if (getActivity() != null) {
+                        animate();
                     }
                 })
                 .start();
@@ -71,4 +63,9 @@ public class RepeatingChainedAnimationsDemoFragment extends Fragment {
         return DpConverter.converDpToPx(dp);
     }
 
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        AdditiveAnimator.cancelAnimationsForObject(animatedView);
+    }
 }

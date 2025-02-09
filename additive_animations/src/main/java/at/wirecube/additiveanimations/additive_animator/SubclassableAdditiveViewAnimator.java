@@ -3,9 +3,10 @@ package at.wirecube.additiveanimations.additive_animator;
 import android.annotation.SuppressLint;
 import android.graphics.Path;
 import android.os.Build;
-import android.support.v4.view.ViewCompat;
 import android.util.Property;
 import android.view.View;
+
+import androidx.core.view.ViewCompat;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -14,8 +15,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import at.wirecube.additiveanimations.additive_animator.animation_set.AnimationState;
+import at.wirecube.additiveanimations.additive_animator.view_visibility.ViewVisibilityAnimation;
 import at.wirecube.additiveanimations.helper.AnimationUtils;
-import at.wirecube.additiveanimations.helper.FloatProperty;
 import at.wirecube.additiveanimations.helper.evaluators.ColorEvaluator;
 import at.wirecube.additiveanimations.helper.propertywrappers.ColorProperties;
 import at.wirecube.additiveanimations.helper.propertywrappers.ElevationProperties;
@@ -26,19 +28,37 @@ import at.wirecube.additiveanimations.helper.propertywrappers.SizeProperties;
 
 public abstract class SubclassableAdditiveViewAnimator<T extends SubclassableAdditiveViewAnimator> extends BaseAdditiveAnimator<T, View> {
 
-    protected boolean mSkipRequestLayout = false;
+    protected boolean mSkipRequestLayout = true;
     protected boolean mWithLayer = false;
 
+    /**
+     * The distinction between this and {@link SubclassableAdditiveViewAnimator#getQueuedPropertyValue(String)} is important when chaining animations:
+     * When an animation has been then-chained, it is not counted as <i>started</i>, but <i>queued</i> until start() is called.
+     *
+     * @return The value of the last <b>started</b> animation target for this property.
+     */
     public static float getTargetPropertyValue(Property<View, Float> property, View v) {
-        return AdditiveAnimationStateManager.from(v).getActualPropertyValue(property);
+        return RunningAnimationsManager.from(v).getActualPropertyValue(property);
     }
 
+    /**
+     * The distinction between this and {@link SubclassableAdditiveViewAnimator#getQueuedPropertyValue(String)} is important when chaining animations:
+     * When an animation has been then-chained, it is not counted as <i>started</i>, but <i>queued</i> until start() is called.
+     *
+     * @return The value of the last <b>started</b> animation target for this property.
+     */
     public static Float getTargetPropertyValue(String propertyName, View v) {
-        return AdditiveAnimationStateManager.from(v).getLastTargetValue(propertyName);
+        return RunningAnimationsManager.from(v).getLastTargetValue(propertyName);
     }
 
+    /**
+     * The distinction between this and {@link SubclassableAdditiveViewAnimator#getTargetPropertyValue(String, View)} (String)} is important when chaining animations:
+     * When an animation has been then-chained, it is not counted as <i>started</i>, but <i>queued</i> until start() is called.
+     *
+     * @return The last <i>queued</i> animation target for this property during then()-building, even before the animation has been started.
+     */
     protected static Float getQueuedPropertyValue(String propertyName, View v) {
-        return AdditiveAnimationStateManager.from(v).getQueuedPropertyValue(propertyName);
+        return RunningAnimationsManager.from(v).getQueuedPropertyValue(propertyName);
     }
 
     @Override
@@ -49,7 +69,7 @@ public abstract class SubclassableAdditiveViewAnimator<T extends SubclassableAdd
 
     @Override
     public T target(View view) {
-        if(mWithLayer) {
+        if (mWithLayer) {
             withLayer();
         }
         return super.target(view);
@@ -67,17 +87,17 @@ public abstract class SubclassableAdditiveViewAnimator<T extends SubclassableAdd
     void applyChanges(List<AccumulatedAnimationValue<View>> accumulatedAnimations) {
         Map<View, List<AccumulatedAnimationValue<View>>> unknownProperties = null;
         Set<View> viewsToRequestLayoutFor = new HashSet<>(1);
-        for(AccumulatedAnimationValue<View> accumulatedAnimationValue : accumulatedAnimations) {
+        for (AccumulatedAnimationValue<View> accumulatedAnimationValue : accumulatedAnimations) {
             View targetView = accumulatedAnimationValue.animation.getTarget();
             viewsToRequestLayoutFor.add(targetView);
-            if(accumulatedAnimationValue.animation.getProperty() != null) {
+            if (accumulatedAnimationValue.animation.getProperty() != null) {
                 accumulatedAnimationValue.animation.getProperty().set(targetView, accumulatedAnimationValue.tempValue);
             } else {
-                if(unknownProperties == null) {
+                if (unknownProperties == null) {
                     unknownProperties = new HashMap<>();
                 }
                 List<AccumulatedAnimationValue<View>> accumulatedValues = unknownProperties.get(targetView);
-                if(accumulatedValues == null) {
+                if (accumulatedValues == null) {
                     accumulatedValues = new ArrayList<>();
                     unknownProperties.put(targetView, accumulatedValues);
                 }
@@ -85,18 +105,18 @@ public abstract class SubclassableAdditiveViewAnimator<T extends SubclassableAdd
             }
         }
 
-        if(unknownProperties != null) {
+        if (unknownProperties != null) {
             for (View v : unknownProperties.keySet()) {
                 HashMap<String, Float> properties = new HashMap<>();
-                for(AccumulatedAnimationValue value : unknownProperties.get(v)) {
+                for (AccumulatedAnimationValue value : unknownProperties.get(v)) {
                     properties.put(value.animation.getTag(), value.tempValue);
                 }
                 applyCustomProperties(properties, v);
             }
         }
 
-        for(View v : viewsToRequestLayoutFor) {
-            if(!ViewCompat.isInLayout(v) && !mSkipRequestLayout) {
+        for (View v : viewsToRequestLayoutFor) {
+            if (!ViewCompat.isInLayout(v) && !mSkipRequestLayout) {
                 v.requestLayout();
             }
         }
@@ -107,10 +127,25 @@ public abstract class SubclassableAdditiveViewAnimator<T extends SubclassableAdd
         // don't need to do anything, this is handled by applyChanges() already.
     }
 
+    /**
+     * Turns off requesting layout after each frame.
+     * Since this is the default value, you should never have to call this method.
+     */
+    @Deprecated
     public T skipRequestLayout() {
         mSkipRequestLayout = true;
         return self();
     }
+
+    /**
+     * Manually turns on requesting layout after each frame.
+     * Calling this method is only necessary if you are animating layout properties via custom builder methods.
+     */
+    public T requestLayout() {
+        mSkipRequestLayout = false;
+        return self();
+    }
+
 
     /**
      * Activates hardware layers.
@@ -118,18 +153,13 @@ public abstract class SubclassableAdditiveViewAnimator<T extends SubclassableAdd
      * Note that
      */
     public T withLayer() {
-        if(mCurrentStateManager != null) {
-            mCurrentStateManager.setUseHardwareLayer(true);
+        if (mRunningAnimationsManager != null) {
+            mRunningAnimationsManager.setUseHardwareLayer(true);
         }
         mSkipRequestLayout = true;
         mWithLayer = true;
 
-        runIfParentIsInSameAnimationGroup(new Runnable() {
-            @Override
-            public void run() {
-                mParent.withLayer();
-            }
-        });
+        runIfParentIsInSameAnimationGroup(() -> mParent.withLayer());
 
         return self();
     }
@@ -138,17 +168,28 @@ public abstract class SubclassableAdditiveViewAnimator<T extends SubclassableAdd
      * Deactivates hardware layers for the current view and all subsequently added ones.
      */
     public T withoutLayer() {
-        if(mCurrentStateManager != null) {
-            mCurrentStateManager.setUseHardwareLayer(false);
+        if (mRunningAnimationsManager != null) {
+            mRunningAnimationsManager.setUseHardwareLayer(false);
         }
         mWithLayer = false;
-        runIfParentIsInSameAnimationGroup(new Runnable() {
-            @Override
-            public void run() {
-                mParent.withoutLayer();
-            }
-        });
+        runIfParentIsInSameAnimationGroup(() -> mParent.withoutLayer());
         return self();
+    }
+
+    public T fadeVisibility(int visibility) {
+        switch (visibility) {
+            case View.VISIBLE:
+                return state(ViewVisibilityAnimation.fadeIn());
+            case View.INVISIBLE:
+                return state(ViewVisibilityAnimation.fadeOut(false));
+            case View.GONE:
+                return state(ViewVisibilityAnimation.fadeOut(true));
+        }
+        return self();
+    }
+
+    public T visibility(AnimationState<View> animation) {
+        return state(animation);
     }
 
     public T backgroundColor(int color) {
@@ -174,7 +215,7 @@ public abstract class SubclassableAdditiveViewAnimator<T extends SubclassableAdd
     public T scale(float scale) {
         scaleY(scale);
         scaleX(scale);
-        return (T) this;
+        return self();
     }
 
     public T scaleBy(float scalesBy) {
@@ -226,18 +267,14 @@ public abstract class SubclassableAdditiveViewAnimator<T extends SubclassableAdd
     // Because we compute a delta value for the current target, we can't simply let BaseAdditiveAnimator
     // handle the propagation of the update.
     private T animateRotationProperty(final Property<View, Float> property, final float target) {
+        initValueAnimatorIfNeeded();
         float currentValue = getTargetPropertyValue(property);
-        if(getQueuedPropertyValue(property.getName()) != null) {
+        if (getQueuedPropertyValue(property.getName()) != null) {
             currentValue = getQueuedPropertyValue(property.getName());
         }
         float shortestDistance = AnimationUtils.shortestAngleBetween(currentValue, target);
-        runIfParentIsInSameAnimationGroup(new Runnable() {
-            @Override
-            public void run() {
-                ((SubclassableAdditiveViewAnimator) mParent).animateRotationProperty(property, target);
-            }
-        });
-        return animatePropertyBy(property, shortestDistance, false);
+        runIfParentIsInSameAnimationGroup(() -> ((SubclassableAdditiveViewAnimator) mParent).animateRotationProperty(property, target));
+        return animate(createAnimation(property, currentValue + shortestDistance), false);
     }
 
     public T alpha(float alpha) {
@@ -329,34 +366,42 @@ public abstract class SubclassableAdditiveViewAnimator<T extends SubclassableAdd
     }
 
     public T leftMargin(int leftMargin) {
+        mSkipRequestLayout = false;
         return animate(MarginProperties.MARGIN_LEFT, leftMargin);
     }
 
     public T leftMarginBy(int leftMarginBy) {
+        mSkipRequestLayout = false;
         return animatePropertyBy(MarginProperties.MARGIN_LEFT, leftMarginBy);
     }
 
     public T topMargin(int topMargin) {
+        mSkipRequestLayout = false;
         return animate(MarginProperties.MARGIN_TOP, topMargin);
     }
 
     public T topMarginBy(int topMarginBy) {
+        mSkipRequestLayout = false;
         return animatePropertyBy(MarginProperties.MARGIN_TOP, topMarginBy);
     }
 
     public T rightMargin(int rightMargin) {
+        mSkipRequestLayout = false;
         return animate(MarginProperties.MARGIN_RIGHT, rightMargin);
     }
 
     public T rightMarginBy(int rightMarginBy) {
+        mSkipRequestLayout = false;
         return animatePropertyBy(MarginProperties.MARGIN_RIGHT, rightMarginBy);
     }
 
     public T bottomMargin(int bottomMargin) {
+        mSkipRequestLayout = false;
         return animate(MarginProperties.MARGIN_BOTTOM, bottomMargin);
     }
 
     public T bottomMarginBy(int bottomMarginBy) {
+        mSkipRequestLayout = false;
         return animatePropertyBy(MarginProperties.MARGIN_BOTTOM, bottomMarginBy);
     }
 
@@ -401,44 +446,54 @@ public abstract class SubclassableAdditiveViewAnimator<T extends SubclassableAdd
     }
 
     public T topLeftMarginAlongPath(Path path) {
+        mSkipRequestLayout = false;
         return animatePropertiesAlongPath(MarginProperties.MARGIN_LEFT, MarginProperties.MARGIN_TOP, null, path);
     }
 
     public T topRightMarginAlongPath(Path path) {
+        mSkipRequestLayout = false;
         return animatePropertiesAlongPath(MarginProperties.MARGIN_RIGHT, MarginProperties.MARGIN_TOP, null, path);
     }
 
     public T bottomRightMarginAlongPath(Path path) {
+        mSkipRequestLayout = false;
         return animatePropertiesAlongPath(MarginProperties.MARGIN_RIGHT, MarginProperties.MARGIN_BOTTOM, null, path);
     }
 
     public T bottomLeftMarginAlongPath(Path path) {
+        mSkipRequestLayout = false;
         return animatePropertiesAlongPath(MarginProperties.MARGIN_LEFT, MarginProperties.MARGIN_BOTTOM, null, path);
     }
 
     public T width(int width) {
+        mSkipRequestLayout = false;
         return animate(SizeProperties.WIDTH, width);
     }
 
     public T widthBy(int widthBy) {
+        mSkipRequestLayout = false;
         return animatePropertyBy(SizeProperties.WIDTH, widthBy);
     }
 
     public T height(int height) {
+        mSkipRequestLayout = false;
         return animate(SizeProperties.HEIGHT, height);
     }
 
     public T heightBy(int heightBy) {
+        mSkipRequestLayout = false;
         return animatePropertyBy(SizeProperties.HEIGHT, heightBy);
     }
 
     public T size(int size) {
+        mSkipRequestLayout = false;
         animate(SizeProperties.WIDTH, size);
         animate(SizeProperties.HEIGHT, size);
         return self();
     }
 
     public T sizeBy(int sizeBy) {
+        mSkipRequestLayout = false;
         animatePropertyBy(SizeProperties.WIDTH, sizeBy);
         animatePropertyBy(SizeProperties.HEIGHT, sizeBy);
         return self();
@@ -559,159 +614,4 @@ public abstract class SubclassableAdditiveViewAnimator<T extends SubclassableAdd
         }
         return self();
     }
-
-
-//    public T widthPercent(float widthPercent) {
-//        if (initPercentListener()){
-//            mPercentListener.widthPercent(widthPercent);
-//        }
-//        return self();
-//    }
-//
-//    public T widthPercentBy(float widthPercentBy) {
-//        if (initPercentListener()){
-//            mPercentListener.widthPercentBy(widthPercentBy);
-//        }
-//        return self();
-//    }
-//
-//    public T heightPercent(float heightPercent) {
-//        if (initPercentListener()){
-//            mPercentListener.heightPercent(heightPercent);
-//        }
-//        return self();
-//    }
-//
-//    public T heightPercentBy(float heightPercentBy) {
-//        if (initPercentListener()){
-//            mPercentListener.heightPercentBy(heightPercentBy);
-//        }
-//        return self();
-//    }
-//
-//    public T sizePercent(float sizePercent) {
-//        if (initPercentListener()){
-//            mPercentListener.sizePercent(sizePercent);
-//        }
-//        return self();
-//    }
-//
-//    public T sizePercentBy(float sizePercentBy) {
-//        if (initPercentListener()){
-//            mPercentListener.sizePercentBy(sizePercentBy);
-//        }
-//        return self();
-//    }
-//
-//    public T leftMarginPercent(float marginPercent) {
-//        if (initPercentListener()){
-//            mPercentListener.leftMarginPercent(marginPercent);
-//        }
-//        return self();
-//    }
-//
-//    public T leftMarginPercentBy(float marginPercentBy) {
-//        if (initPercentListener()){
-//            mPercentListener.leftMarginPercentBy(marginPercentBy);
-//        }
-//        return self();
-//    }
-//
-//    public T topMarginPercent(float marginPercent) {
-//        if (initPercentListener()){
-//            mPercentListener.topMarginPercent(marginPercent);
-//        }
-//        return self();
-//    }
-//
-//    public T topMarginPercentBy(float marginPercentBy) {
-//        if (initPercentListener()){
-//            mPercentListener.topMarginPercentBy(marginPercentBy);
-//        }
-//        return self();
-//    }
-//
-//    public T bottomMarginPercent(float marginPercent) {
-//        if (initPercentListener()){
-//            mPercentListener.bottomMarginPercent(marginPercent);
-//        }
-//        return self();
-//    }
-//
-//    public T bottomMarginPercentBy(float marginPercentBy) {
-//        if (initPercentListener()){
-//            mPercentListener.bottomMarginPercentBy(marginPercentBy);
-//        }
-//        return self();
-//    }
-//
-//    public T rightMarginPercent(float marginPercent) {
-//        if (initPercentListener()){
-//            mPercentListener.rightMarginPercent(marginPercent);
-//        }
-//        return self();
-//    }
-//
-//    public T rightMarginPercentBy(float marginPercentBy) {
-//        if (initPercentListener()){
-//            mPercentListener.rightMarginPercentBy(marginPercentBy);
-//        }
-//        return self();
-//    }
-//
-//    public T horizontalMarginPercent(float marginPercent) {
-//        if (initPercentListener()){
-//            mPercentListener.horizontalMarginPercent(marginPercent);
-//        }
-//        return self();
-//    }
-//
-//    public T horizontalMarginPercentBy(float marginPercentBy) {
-//        if (initPercentListener()){
-//            mPercentListener.horizontalMarginPercentBy(marginPercentBy);
-//        }
-//        return self();
-//    }
-//
-//    public T verticalMarginPercent(float marginPercent) {
-//        if (initPercentListener()){
-//            mPercentListener.verticalMarginPercent(marginPercent);
-//        }
-//        return self();
-//    }
-//
-//    public T verticalMarginPercentBy(float marginPercentBy) {
-//        if (initPercentListener()){
-//            mPercentListener.verticalMarginPercentBy(marginPercentBy);
-//        }
-//        return self();
-//    }
-//
-//    public T marginPercent(float marginPercent) {
-//        if (initPercentListener()){
-//            mPercentListener.marginPercent(marginPercent);
-//        }
-//        return self();
-//    }
-//
-//    public T marginPercentBy(float marginPercentBy) {
-//        if (initPercentListener()){
-//            mPercentListener.marginPercentBy(marginPercentBy);
-//        }
-//        return self();
-//    }
-//
-//    public T aspectRatio(float aspectRatio) {
-//        if (initPercentListener()){
-//            mPercentListener.aspectRatio(aspectRatio);
-//        }
-//        return self();
-//    }
-//
-//    public T aspectRatioBy(float aspectRatioBy) {
-//        if (initPercentListener()){
-//            mPercentListener.aspectRatioBy(aspectRatioBy);
-//        }
-//        return self();
-//    }
 }
